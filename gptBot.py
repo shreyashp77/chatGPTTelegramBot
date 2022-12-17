@@ -1,6 +1,7 @@
 import openai
 import telegram
 from telegram import ext
+from telegram.ext import CommandHandler
 from keys import telegramKey, openAiKey
 
 # Replace with your actual Telegram token
@@ -10,17 +11,27 @@ bot = telegram.Bot(token=telegramKey)
 openai.api_key = openAiKey
 
 
-def generate_response(prompt):
+def generate_response(prompt, previous_prompts, previous_response):
     completions = openai.Completion.create(
         engine="text-davinci-002",
-        prompt=prompt,
+        prompt=previous_prompts + "\n" + previous_response + "\n" + prompt,
         max_tokens=2048,
         n=1,
         temperature=0.7,
     )
 
-    message = completions.choices[0].text
+    try:
+        message = completions.choices[0].text
+    except Exception as e:
+        return ("Error :(\nTry again!")
+
+    if len(message) == 0:
+        return "Try again :("
+    if message[0] == "?":
+        message = message[1:]
+
     return message
+
 
 # Handle the /start command
 
@@ -30,15 +41,32 @@ def start(update, context):
         "Hello! I am a chatbot powered by GPT called Friday.")
     update.message.reply_text(
         "How can I help you today?")
-        
+
 
 # Handle any other message
 
 
+previous_prompt = ""
+previous_response = ""
+
+
 def message(update, context):
+    global previous_prompt
+    global previous_response
     prompt = update.message.text
-    response = generate_response(prompt)
+    if prompt == "/stop":
+        return close(update, context)
+    response = generate_response(prompt, previous_prompt, previous_response)
     update.message.reply_text(response)
+    previous_prompt = prompt
+    previous_response = response
+
+
+# handle /stop
+def close(update, context):
+    update.message.reply_text("Ok Bye!")
+    updater = telegram.ext.Updater(token=telegramKey, use_context=True)
+    updater.stop()
 
 
 # Set up the Updater and start it
